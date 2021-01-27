@@ -15,6 +15,13 @@ def createGraphMemberMap(graph_member_list):
     for n in graph_member_list:
         member_map[n.name]=n;
     return member_map
+    
+def createConstantGraphMemberMapFromOutput(graph_member_list):
+    member_map=dict();
+    for n in graph_member_list:
+        if n.op_type == "Constant":
+            member_map[n.output[0]]=n;
+    return member_map
 
 
 def split_io_list(io_list,new_names_all):
@@ -149,6 +156,71 @@ def onnx_edit(input_model, output_model, new_input_node_names, input_shape_map, 
         if name in input_map.keys():
             graph.input.remove(input_map[name])    
 
+    ###############################################
+    #yolov3 inference fix for NNAPI 5D --> 4D
+    ###############################################
+    '''
+    constant_map = createConstantGraphMemberMapFromOutput(graph.node)
+    for _, node in node_map.items():
+        if node.op_type == "Transpose" and len(node.attribute[0].ints[:]) == 5:
+            print(node)
+            node.attribute[0].ints[:] = [0,2,3,1]
+            print(node)
+    for _, node in node_map.items():
+        if node.op_type == "Reshape":
+            reshape_input_name = node.input[1]
+            reshape_input_node = constant_map[reshape_input_name]
+            node_attr_t = reshape_input_node.attribute[0].t
+            if node_attr_t.dims == [5] and node_attr_t.data_type == 7:
+                print(reshape_input_node)
+                new_tensor_proto = TensorProto()
+                new_tensor_proto.dims[:] = [4]
+                new_tensor_proto.data_type = 7
+                new_tensor_proto.raw_data = node_attr_t.raw_data[8:]
+                reshape_input_node.attribute[0].t.CopyFrom(new_tensor_proto)
+                print(reshape_input_node)'''
+    ################################################################
+    #keras_efficientNet.onnx inference fix for NNAPI 5D --> 4D
+    ################################################################
+    '''
+    for _, node in node_map.items():
+        if node.op_type == "PRelu":
+            print(node)
+            input_name = node.input[1]
+            input_node = initializer_map[input_name]
+            if input_node.dims == [1,1,32] and input_node.data_type == 1:
+                print(initializer_map[input_name])
+                new_tensor_proto = TensorProto()
+                new_tensor_proto.dims[:] = [32]
+                new_tensor_proto.data_type = 1
+                new_tensor_proto.float_data[:] = input_node.float_data
+                new_tensor_proto.name = input_node.name
+                input_node.CopyFrom(new_tensor_proto)
+                print(initializer_map[input_name])'''
+                
+    ################################################################
+    #super_resolution.onnx inference fix for NNAPI for NNAPI 6D --> 4D
+    ################################################################
+    '''constant_map = createConstantGraphMemberMapFromOutput(graph.node)
+    for _, node in node_map.items():
+        if node.op_type == "Transpose" and len(node.attribute[0].ints[:]) == 6:
+            print(node)
+            node.attribute[0].ints[:] = [0,2,1,3]
+            print(node)
+    for _, node in node_map.items():
+        if node.op_type == "Reshape":
+            reshape_input_name = node.input[1]
+            reshape_input_node = constant_map[reshape_input_name]
+            node_attr_t = reshape_input_node.attribute[0].t
+            if node_attr_t.dims == [6] and node_attr_t.data_type == 7:
+                print(reshape_input_node)
+                new_tensor_proto = TensorProto()
+                new_tensor_proto.dims[:] = [4]
+                new_tensor_proto.data_type = 6
+                new_tensor_proto.int32_data[:] = [3,3,224,224]
+                reshape_input_node.attribute[0].t.CopyFrom(new_tensor_proto)
+                print(reshape_input_node)'''
+    
     # SAVE MODEL
     if(verify):    
         print("output model Errors: ", onnx.checker.check_model(model))
